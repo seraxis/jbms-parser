@@ -114,7 +114,7 @@ public class OSUDecoder extends ChartDecoder {
 			default:
 				return null;
 		}
-		model.setLnmode(BMSModel.LNTYPE_LONGNOTE);
+		//model.setLnmode(BMSModel.LNTYPE_LONGNOTE);
 		model.setBanner("");
 		for (int i = 0; i < osu.events.size(); i++) {
 			try {
@@ -126,49 +126,54 @@ public class OSUDecoder extends ChartDecoder {
 				continue;
 			}
 		}
-		model.setPreview("");
+		model.setPreview(osu.general.audioFilename);
 
 		TreeMap<Integer, TimeLine> timelines = new TreeMap<Integer, TimeLine>();
-		TreeMap<Integer, Float> svs = new TreeMap<Integer, Float>();
+		TreeMap<Integer, Double> svs = new TreeMap<Integer, Double>();
 		TreeMap<Integer, TimingPoints> timingPoints = new TreeMap<Integer, TimingPoints>();
 		for (int i = 0; i < osu.timingPoints.size(); i++) {
 			TimingPoints point = osu.timingPoints.get(i);
 			if (point.uninherited) {
 				timingPoints.put(point.time.intValue(), point);
+				svs.put(point.time.intValue(), 1.0);
 			} else {
-				float sv = point.beatLength;
-				sv = 100.f / (-sv);
+				double sv = point.beatLength;
+				sv = 100 / (-sv);
 				svs.put(point.time.intValue(), sv);
 			}
 		}
-		model.setBpm(1 / timingPoints.firstEntry().getValue().beatLength * 1000 * 60);
+		model.setBpm(GetBpm(timingPoints, 0));
 		Vector<String> wavmap = new Vector<String>();
 		wavmap.add(osu.general.audioFilename);
 		wavmap.add("");
-		TimeLine bgmTl = new TimeLine(0, 0, model.getMode().key);
+		TimeLine bgmTl = GetTimeline(timelines, 0, 0);
 		Note bgm = new NormalNote(0, 0, 0);
 		bgmTl.addBackGroundNote(bgm);
-		bgmTl.setBPM(model.getBpm());
+		bgmTl.setBPM(GetBpm(timingPoints, bgmTl.getTime()));
+		bgmTl.setScroll(GetSv(svs, bgmTl.getTime()));
 		bgmTl.setBGA(0);
-		timelines.put(0, bgmTl);
 
-		TimingPoints timingPoint = timingPoints.firstEntry().getValue();
-		//TimingPoints nextTimingPoint = timingPoints.higherEntry(timingPoint.time.intValue()) != null ?
-		//		timingPoints.higherEntry(timingPoint.time.intValue()).getValue() : null;
-		//float sv = svs.firstEntry() != null ? svs.firstEntry().getValue() : 1.f;
+		for (Map.Entry<Integer, TimingPoints> point : timingPoints.entrySet()) {
+			TimeLine timeline = GetTimeline(timelines, point.getKey(), GetSection(timingPoints, point.getKey()));
+			timeline.setBPM(1 / point.getValue().beatLength * 1000 * 60);
+			timeline.setScroll(GetSv(svs, point.getKey()));
+		}
+		for (Map.Entry<Integer, Double> sv : svs.entrySet()) {
+			TimeLine timeline = GetTimeline(timelines, sv.getKey(), GetSection(timingPoints, sv.getKey()));
+			timeline.setScroll(sv.getValue());
+			timeline.setBPM(GetBpm(timingPoints, sv.getKey()));
+		}
+
 		for (int i = 0; i < osu.hitObjects.size(); i++) {
 			HitObjects hitObject = osu.hitObjects.get(i);
 
 			int columnIdx = ((int) Math.floor(hitObject.x * keymode / 512.f));
 			columnIdx = Math.max(0, Math.min(keymode - 1, columnIdx));
-			double section = hitObject.time / (timingPoint.beatLength * timingPoint.meter);
+			double section = GetSection(timingPoints, hitObject.time);
 
-			TimeLine timeline = timelines.get(hitObject.time);
-			if (timeline == null) {
-				timeline = new TimeLine(section, hitObject.time.longValue() * 1000, model.getMode().key);
-				timelines.put(hitObject.time, timeline);
-			}
-			timeline.setBPM(model.getBpm());
+			TimeLine timeline = GetTimeline(timelines, hitObject.time, section);
+			timeline.setBPM(GetBpm(timingPoints, timeline.getTime()));
+			timeline.setScroll(GetSv(svs, timeline.getTime()));
 			Boolean isManiaHold = (hitObject.type & 0x80) > 0;
 			int wavIdx = 1;
 		/*if (!hitObject.hitSample.filename.isEmpty()) { // keysounds potentially go here.
@@ -177,24 +182,20 @@ public class OSUDecoder extends ChartDecoder {
 		}*/
 			if (isManiaHold) {
 				LongNote head = new LongNote(wavIdx, hitObject.time * 1000, 0);
+				head.setType(model.getLntype());
 				timeline.setNote(mapping[columnIdx], head);
 
 				int tailTimeMs = Integer.parseInt(hitObject.objectParams.get(0));
 				long tailTimeUs = (long) tailTimeMs * 1000;
-				double tailSection = (double) tailTimeMs / (timingPoint.beatLength * timingPoint.meter);
+				double tailSection = GetSection(timingPoints, tailTimeMs);
 				LongNote tail = new LongNote(wavIdx, tailTimeUs, 0);
-
-				TimeLine tailTl = timelines.get(tailTimeMs);
-				if (tailTl == null) {
-					tailTl = new TimeLine(tailSection, tailTimeUs, model.getMode().key);
-					timelines.put(tailTimeMs, timeline);
-				}
-				tailTl.setBPM(model.getBpm());
+				tail.setType(model.getLntype());
+				TimeLine tailTl = GetTimeline(timelines, tailTimeMs, tailSection);
+				tailTl.setBPM(GetBpm(timingPoints, tailTimeMs));
+				tailTl.setScroll(GetSv(svs, tailTimeMs));
 				tailTl.setNote(mapping[columnIdx], tail);
-				timelines.put(Integer.parseInt(hitObject.objectParams.get(0)), tailTl);
 
 				head.setPair(tail);
-				tail.setPair(head);
 			} else {
 				NormalNote note = new NormalNote(wavIdx, hitObject.time * 1000, 0);
 				timeline.setNote(mapping[columnIdx], note);
@@ -206,5 +207,62 @@ public class OSUDecoder extends ChartDecoder {
 		model.setBgaList(bgaList);
 		model.setChartInformation(new ChartInformation(f, lntype, null));
 		return model;
+	}
+
+	TimingPoints GetTimingPoint(TreeMap<Integer, TimingPoints> timingPoints, int time) {
+		Map.Entry<Integer, TimingPoints> entry = timingPoints.firstEntry();
+		while(entry.getKey() < time) {
+			Map.Entry<Integer, TimingPoints> nextEntry = timingPoints.higherEntry(entry.getKey());
+			if (nextEntry == null) break;
+			if (nextEntry.getKey() <= time) entry = nextEntry;
+			else break;
+		}
+		return entry.getValue();
+	}
+
+	double GetBpm(TreeMap<Integer, TimingPoints> timingPoints, int time) {
+		TimingPoints point = GetTimingPoint(timingPoints, time);
+		return 1 / point.beatLength * 1000 * 60;
+	}
+
+	double GetSv(TreeMap<Integer, Double> svs, int time) {
+		Map.Entry<Integer, Double> entry = svs.firstEntry();
+		if (entry == null || entry.getKey() > time) return 1;
+		while(entry.getKey() < time) {
+			Map.Entry<Integer, Double> nextEntry = svs.higherEntry(entry.getKey());
+			if (nextEntry == null) break;
+			if (nextEntry.getKey() <= time) entry = nextEntry;
+			else break;
+		}
+		return entry.getValue();
+	}
+
+	TimeLine GetTimeline(TreeMap<Integer, TimeLine> timelines, int time, double section) {
+		TimeLine timeline = timelines.get(time);
+		if (timeline == null) {
+			timeline = new TimeLine(section, (long)time * 1000, model.getMode().key);
+			timelines.put(time, timeline);
+		}
+		return timeline;
+	}
+
+	double GetSection(TreeMap<Integer, TimingPoints> timingPoints, int time) {
+		Map.Entry<Integer, TimingPoints> entry = timingPoints.firstEntry();
+		double section;
+		if (time <= entry.getKey()) {
+			section = time / (entry.getValue().beatLength * 4);
+			return section;
+		}
+		section = entry.getKey() / (entry.getValue().beatLength * 4);
+		while(entry.getKey() < time) {
+			Map.Entry<Integer, TimingPoints> nextEntry = timingPoints.higherEntry(entry.getKey());
+			if (nextEntry == null || nextEntry.getKey() > time) {
+				section += (time - entry.getKey()) / (entry.getValue().beatLength * 4);
+				break;
+			}
+			section += (nextEntry.getKey() - entry.getKey()) / (entry.getValue().beatLength * 4);
+			entry = nextEntry;
+		}
+		return section;
 	}
 }
