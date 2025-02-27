@@ -138,19 +138,31 @@ public class OSUDecoder extends ChartDecoder {
 			if (point.uninherited) {
 				timingPoints.add(point);
 
-				if (i != osu.timingPoints.size() - 1 && !osu.timingPoints.get(i+1).time.equals(point.time)) {
-					TimingPoints sv = new TimingPoints();
-					sv.time = point.time;
-					sv.beatLength = -100.f;
-					sv.meter = point.meter;
-					sv.sampleSet = point.sampleSet;
-					sv.sampleIndex = point.sampleIndex;
-					sv.volume = point.volume;
-					sv.uninherited = false;
-					sv.effects = point.effects;
+				TimingPoints sv = new TimingPoints();
+				sv.time = point.time;
+				sv.beatLength = -100.f;
+				sv.meter = point.meter;
+				sv.sampleSet = point.sampleSet;
+				sv.sampleIndex = point.sampleIndex;
+				sv.volume = point.volume;
+				sv.uninherited = false;
+				sv.effects = point.effects;
+				if (i != osu.timingPoints.size() - 1) {
+					if (!osu.timingPoints.get(i+1).time.equals(point.time)) {
+						svs.add(sv);
+					}
+				}
+				else {
 					svs.add(sv);
 				}
 			} else {
+				if (!svs.isEmpty()) {
+					TimingPoints lastSv = svs.get(svs.size() - 1);
+					if (lastSv.time.equals(point.time)) {
+						lastSv.beatLength = point.beatLength;
+						continue;
+					}
+				}
 				svs.add(point);
 			}
 		}
@@ -163,6 +175,7 @@ public class OSUDecoder extends ChartDecoder {
 		bgmTl.setBPM(GetBpm(timingPoints, bgmTl.getTime()));
 		bgmTl.setScroll(GetSv(svs, bgmTl.getTime()));
 		bgmTl.setBGA(0);
+		bgmTl.setSectionLine(true);
 
 		for (TimingPoints point : timingPoints) {
 			TimeLine timeline = GetTimeline(timelines, point.time.intValue(), GetSection(timingPoints, point.time.intValue()));
