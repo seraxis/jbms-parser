@@ -73,7 +73,7 @@ public class OSUDecoder extends ChartDecoder {
 			}
 			case 6: {
 				model.setMode(Mode.BEAT_7K);
-				mapping = new int[]{0, 1, 2, 4, 5, 6, -1};
+				mapping = new int[]{0, 1, 2, 4, 5, 6, -1, -1};
 				break;
 			}
 			case 7: {
@@ -103,12 +103,12 @@ public class OSUDecoder extends ChartDecoder {
 			}
 			case 14: {
 				model.setMode(Mode.BEAT_14K);
-				mapping = new int[]{0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, -1};
+				mapping = new int[]{0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, -1, -1};
 				break;
 			}
 			case 16: {
 				model.setMode(Mode.BEAT_14K);
-				mapping = new int[]{7, 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14};
+				mapping = new int[]{7, 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15};
 				break;
 			}
 			default:
@@ -128,24 +128,35 @@ public class OSUDecoder extends ChartDecoder {
 		}
 		model.setPreview(osu.general.audioFilename);
 
+		int offset = 38;
 		TreeMap<Integer, TimeLine> timelines = new TreeMap<Integer, TimeLine>();
-		TreeMap<Integer, Double> svs = new TreeMap<Integer, Double>();
-		TreeMap<Integer, TimingPoints> timingPoints = new TreeMap<Integer, TimingPoints>();
+		ArrayList<TimingPoints> timingPoints = new ArrayList<TimingPoints>();
+		ArrayList<TimingPoints> svs = new ArrayList<TimingPoints>();
 		for (int i = 0; i < osu.timingPoints.size(); i++) {
 			TimingPoints point = osu.timingPoints.get(i);
+			point.time += offset;
 			if (point.uninherited) {
-				timingPoints.put(point.time.intValue(), point);
-				svs.put(point.time.intValue(), 1.0);
+				timingPoints.add(point);
+
+				if (i != osu.timingPoints.size() - 1 && !osu.timingPoints.get(i+1).time.equals(point.time)) {
+					TimingPoints sv = new TimingPoints();
+					sv.time = point.time;
+					sv.beatLength = -100.f;
+					sv.meter = point.meter;
+					sv.sampleSet = point.sampleSet;
+					sv.sampleIndex = point.sampleIndex;
+					sv.volume = point.volume;
+					sv.uninherited = false;
+					sv.effects = point.effects;
+					svs.add(sv);
+				}
 			} else {
-				double sv = point.beatLength;
-				sv = 100 / (-sv);
-				svs.put(point.time.intValue(), sv);
+				svs.add(point);
 			}
 		}
 		model.setBpm(GetBpm(timingPoints, 0));
 		Vector<String> wavmap = new Vector<String>();
 		wavmap.add(osu.general.audioFilename);
-		wavmap.add("");
 		TimeLine bgmTl = GetTimeline(timelines, 0, 0);
 		Note bgm = new NormalNote(0, 0, 0);
 		bgmTl.addBackGroundNote(bgm);
@@ -153,19 +164,20 @@ public class OSUDecoder extends ChartDecoder {
 		bgmTl.setScroll(GetSv(svs, bgmTl.getTime()));
 		bgmTl.setBGA(0);
 
-		for (Map.Entry<Integer, TimingPoints> point : timingPoints.entrySet()) {
-			TimeLine timeline = GetTimeline(timelines, point.getKey(), GetSection(timingPoints, point.getKey()));
-			timeline.setBPM(1 / point.getValue().beatLength * 1000 * 60);
-			timeline.setScroll(GetSv(svs, point.getKey()));
+		for (TimingPoints point : timingPoints) {
+			TimeLine timeline = GetTimeline(timelines, point.time.intValue(), GetSection(timingPoints, point.time.intValue()));
+			timeline.setBPM(1 / point.beatLength * 1000 * 60);
+			timeline.setScroll(GetSv(svs, point.time.intValue()));
 		}
-		for (Map.Entry<Integer, Double> sv : svs.entrySet()) {
-			TimeLine timeline = GetTimeline(timelines, sv.getKey(), GetSection(timingPoints, sv.getKey()));
-			timeline.setScroll(sv.getValue());
-			timeline.setBPM(GetBpm(timingPoints, sv.getKey()));
+		for (TimingPoints sv : svs) {
+			TimeLine timeline = GetTimeline(timelines, sv.time.intValue(), GetSection(timingPoints, sv.time.intValue()));
+			timeline.setScroll(100.d / (-sv.beatLength.doubleValue()));
+			timeline.setBPM(GetBpm(timingPoints, sv.time.intValue()));
 		}
 
 		for (int i = 0; i < osu.hitObjects.size(); i++) {
 			HitObjects hitObject = osu.hitObjects.get(i);
+			hitObject.time += offset;
 
 			int columnIdx = ((int) Math.floor(hitObject.x * keymode / 512.f));
 			columnIdx = Math.max(0, Math.min(keymode - 1, columnIdx));
@@ -175,7 +187,7 @@ public class OSUDecoder extends ChartDecoder {
 			timeline.setBPM(GetBpm(timingPoints, timeline.getTime()));
 			timeline.setScroll(GetSv(svs, timeline.getTime()));
 			Boolean isManiaHold = (hitObject.type & 0x80) > 0;
-			int wavIdx = 1;
+			int wavIdx = -2;
 		/*if (!hitObject.hitSample.filename.isEmpty()) { // keysounds potentially go here.
 			wavIdx = wavmap.size();
 			wavmap.add(hitObject.hitSample.filename);
@@ -185,7 +197,7 @@ public class OSUDecoder extends ChartDecoder {
 				head.setType(model.getLntype());
 				timeline.setNote(mapping[columnIdx], head);
 
-				int tailTimeMs = Integer.parseInt(hitObject.objectParams.get(0));
+				int tailTimeMs = Integer.parseInt(hitObject.objectParams.get(0)) + offset;
 				long tailTimeUs = (long) tailTimeMs * 1000;
 				double tailSection = GetSection(timingPoints, tailTimeMs);
 				LongNote tail = new LongNote(wavIdx, tailTimeUs, 0);
@@ -209,32 +221,50 @@ public class OSUDecoder extends ChartDecoder {
 		return model;
 	}
 
-	TimingPoints GetTimingPoint(TreeMap<Integer, TimingPoints> timingPoints, int time) {
-		Map.Entry<Integer, TimingPoints> entry = timingPoints.firstEntry();
-		while(entry.getKey() < time) {
-			Map.Entry<Integer, TimingPoints> nextEntry = timingPoints.higherEntry(entry.getKey());
-			if (nextEntry == null) break;
-			if (nextEntry.getKey() <= time) entry = nextEntry;
-			else break;
+	TimingPoints GetTimingPoint(ArrayList<TimingPoints> timingPoints, int time) {
+		TimingPoints entry = timingPoints.get(0);
+		int lastIdx = 0;
+		while(entry.time < time) {
+			try {
+				TimingPoints nextEntry = timingPoints.get(++lastIdx);
+				while (nextEntry.time <= entry.time) nextEntry = timingPoints.get(++lastIdx);
+				if (nextEntry.time <= time) entry = nextEntry;
+				else break;
+			}
+			catch (IndexOutOfBoundsException e) {
+				break;
+			}
 		}
-		return entry.getValue();
+		return entry;
 	}
 
-	double GetBpm(TreeMap<Integer, TimingPoints> timingPoints, int time) {
+	double GetBpm(ArrayList<TimingPoints> timingPoints, int time) {
 		TimingPoints point = GetTimingPoint(timingPoints, time);
 		return 1 / point.beatLength * 1000 * 60;
 	}
 
-	double GetSv(TreeMap<Integer, Double> svs, int time) {
-		Map.Entry<Integer, Double> entry = svs.firstEntry();
-		if (entry == null || entry.getKey() > time) return 1;
-		while(entry.getKey() < time) {
-			Map.Entry<Integer, Double> nextEntry = svs.higherEntry(entry.getKey());
-			if (nextEntry == null) break;
-			if (nextEntry.getKey() <= time) entry = nextEntry;
-			else break;
+	double GetSv(ArrayList<TimingPoints> svs, int time) {
+		TimingPoints entry;
+		try {
+			entry = svs.get(0);
 		}
-		return entry.getValue();
+		catch (IndexOutOfBoundsException e) {
+			return 1;
+		}
+		if (entry.time.intValue() > time) return 1;
+		int lastIdx = 0;
+		while(entry.time.intValue() < time) {
+			try {
+				TimingPoints nextEntry = svs.get(++lastIdx);
+				while (nextEntry.time <= entry.time) nextEntry = svs.get(++lastIdx);
+				if (nextEntry.time.intValue() <= time) entry = nextEntry;
+				else break;
+			}
+			catch (IndexOutOfBoundsException e) {
+				break;
+			}
+		}
+		return 100.d / (-entry.beatLength.doubleValue());
 	}
 
 	TimeLine GetTimeline(TreeMap<Integer, TimeLine> timelines, int time, double section) {
@@ -246,22 +276,31 @@ public class OSUDecoder extends ChartDecoder {
 		return timeline;
 	}
 
-	double GetSection(TreeMap<Integer, TimingPoints> timingPoints, int time) {
-		Map.Entry<Integer, TimingPoints> entry = timingPoints.firstEntry();
+	double GetSection(ArrayList<TimingPoints> timingPoints, int time) {
+		TimingPoints entry = timingPoints.get(0);
 		double section;
-		if (time <= entry.getKey()) {
-			section = time / (entry.getValue().beatLength * 4);
+		if (time <= entry.time) {
+			section = time / (entry.beatLength * 4);
 			return section;
 		}
-		section = entry.getKey() / (entry.getValue().beatLength * 4);
-		while(entry.getKey() < time) {
-			Map.Entry<Integer, TimingPoints> nextEntry = timingPoints.higherEntry(entry.getKey());
-			if (nextEntry == null || nextEntry.getKey() > time) {
-				section += (time - entry.getKey()) / (entry.getValue().beatLength * 4);
+		section = entry.time / (entry.beatLength * 4);
+		int lastIdx = 0;
+		while(entry.time < time) {
+			try {
+				TimingPoints nextEntry = timingPoints.get(++lastIdx);
+				while (nextEntry.time <= entry.time) nextEntry = timingPoints.get(++lastIdx);
+				if (nextEntry.time > time) {
+					section += (time - entry.time) / (entry.beatLength * 4);
+					break;
+				}
+				section += (nextEntry.time - entry.time) / (entry.beatLength * 4);
+				entry = nextEntry;
+			}
+			catch (IndexOutOfBoundsException e) {
+				section += (time - entry.time) / (entry.beatLength * 4);
 				break;
 			}
-			section += (nextEntry.getKey() - entry.getKey()) / (entry.getValue().beatLength * 4);
-			entry = nextEntry;
+
 		}
 		return section;
 	}
