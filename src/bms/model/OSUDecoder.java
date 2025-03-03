@@ -175,7 +175,6 @@ public class OSUDecoder extends ChartDecoder {
 		bgmTl.setBPM(GetBpm(timingPoints, bgmTl.getTime()));
 		bgmTl.setScroll(GetSv(svs, bgmTl.getTime()));
 		bgmTl.setBGA(0);
-		bgmTl.setSectionLine(true);
 
 		for (TimingPoints point : timingPoints) {
 			TimeLine timeline = GetTimeline(timelines, point.time.intValue(), GetSection(timingPoints, point.time.intValue()));
@@ -186,6 +185,23 @@ public class OSUDecoder extends ChartDecoder {
 			TimeLine timeline = GetTimeline(timelines, sv.time.intValue(), GetSection(timingPoints, sv.time.intValue()));
 			timeline.setScroll(100.d / (-sv.beatLength.doubleValue()));
 			timeline.setBPM(GetBpm(timingPoints, sv.time.intValue()));
+		}
+
+		for (int i = 0; i < timingPoints.size(); i++) {
+			int lastNoteTime = osu.hitObjects.get(osu.hitObjects.size() - 1).time;
+			TimingPoints point = timingPoints.get(i);
+			int beginTime = point.time.intValue();
+			int endTime = i < timingPoints.size() - 1 ? timingPoints.get(i + 1).time.intValue() : lastNoteTime;
+			double beginSection = GetSection(timingPoints, beginTime);
+			int duration = endTime - beginTime;
+			float totalSections = duration / (point.beatLength * 4);
+			for (int section = 0; section <= (int)totalSections; section++) {
+				int time = beginTime + (int)(section * point.beatLength * 4);
+				TimeLine line = GetTimeline(timelines, time, beginSection + section);
+				line.setBPM(1 / point.beatLength * 1000 * 60);
+				line.setScroll(GetSv(svs, time));
+				line.setSectionLine(true);
+			}
 		}
 
 		for (int i = 0; i < osu.hitObjects.size(); i++) {
