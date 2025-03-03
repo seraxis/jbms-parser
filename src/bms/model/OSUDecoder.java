@@ -116,12 +116,22 @@ public class OSUDecoder extends ChartDecoder {
 		}
 		//model.setLnmode(BMSModel.LNTYPE_LONGNOTE);
 		model.setBanner("");
+
+		ArrayList<Events> bgSounds = new ArrayList<Events>();
+		Vector<String> wavmap = new Vector<String>();
+		wavmap.add(osu.general.audioFilename);
 		for (int i = 0; i < osu.events.size(); i++) {
 			try {
 				Events event = osu.events.get(i);
-				if (Integer.parseInt(event.eventType) != 0) continue;
-				model.setBackbmp(event.eventParams.get(0));
-				model.setStagefile(event.eventParams.get(0));
+				if (Integer.parseInt(event.eventType) == 0) {
+					model.setBackbmp(event.eventParams.get(0));
+					model.setStagefile(event.eventParams.get(0));
+				}
+				else if (event.eventType.equals("Sample") || Integer.parseInt(event.eventType) == 5) {
+					String name = event.eventParams.get(1).replace("\"", "");
+					wavmap.add(name);
+					bgSounds.add(event);
+				}
 			} catch (NumberFormatException e) {
 				continue;
 			}
@@ -167,8 +177,6 @@ public class OSUDecoder extends ChartDecoder {
 			}
 		}
 		model.setBpm(GetBpm(timingPoints, 0));
-		Vector<String> wavmap = new Vector<String>();
-		wavmap.add(osu.general.audioFilename);
 		TimeLine bgmTl = GetTimeline(timelines, 0, 0);
 		Note bgm = new NormalNote(0, 0, 0);
 		bgmTl.addBackGroundNote(bgm);
@@ -176,6 +184,14 @@ public class OSUDecoder extends ChartDecoder {
 		bgmTl.setScroll(GetSv(svs, bgmTl.getTime()));
 		bgmTl.setBGA(0);
 
+		for (int i = 0; i < bgSounds.size(); i++) {
+			Events event = bgSounds.get(i);
+			TimeLine timeline = GetTimeline(timelines, event.startTime, GetSection(timingPoints, event.startTime));
+			Note note = new NormalNote(i+1, event.startTime, 0);
+			timeline.addBackGroundNote(note);
+			timeline.setBPM(GetBpm(timingPoints, event.startTime));
+			timeline.setScroll(GetSv(svs, event.startTime));
+		}
 		for (TimingPoints point : timingPoints) {
 			TimeLine timeline = GetTimeline(timelines, point.time.intValue(), GetSection(timingPoints, point.time.intValue()));
 			timeline.setBPM(1 / point.beatLength * 1000 * 60);
