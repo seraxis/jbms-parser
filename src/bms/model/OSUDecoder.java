@@ -117,20 +117,37 @@ public class OSUDecoder extends ChartDecoder {
 		//model.setLnmode(BMSModel.LNTYPE_LONGNOTE);
 		model.setBanner("");
 
+		int offset = 38;
+		ArrayList<String> bgaList = new ArrayList<String>();
+		ArrayList<Events> videos = new ArrayList<Events>();
 		ArrayList<Events> bgSounds = new ArrayList<Events>();
 		Vector<String> wavmap = new Vector<String>();
 		wavmap.add(osu.general.audioFilename);
 		for (int i = 0; i < osu.events.size(); i++) {
 			try {
 				Events event = osu.events.get(i);
-				if (Integer.parseInt(event.eventType) == 0) {
-					model.setBackbmp(event.eventParams.get(0));
-					model.setStagefile(event.eventParams.get(0));
-				}
-				else if (event.eventType.equals("Sample") || Integer.parseInt(event.eventType) == 5) {
-					String name = event.eventParams.get(1).replace("\"", "");
-					wavmap.add(name);
-					bgSounds.add(event);
+				switch(event.eventType) {
+					case "0": {
+						model.setBackbmp(event.eventParams.get(0));
+						model.setStagefile(event.eventParams.get(0));
+						break;
+					}
+					case "1":
+					case "Video": {
+						event.startTime += offset;
+						String name = event.eventParams.get(0).replace("\"", "");
+						bgaList.add(name);
+						videos.add(event);
+						break;
+					}
+					case "5":
+					case "Sample": {
+						String name = event.eventParams.get(1).replace("\"", "");
+						wavmap.add(name);
+						bgSounds.add(event);
+						break;
+					}
+					default: continue;
 				}
 			} catch (NumberFormatException e) {
 				continue;
@@ -138,7 +155,6 @@ public class OSUDecoder extends ChartDecoder {
 		}
 		model.setPreview(osu.general.audioFilename);
 
-		int offset = 38;
 		TreeMap<Integer, TimeLine> timelines = new TreeMap<Integer, TimeLine>();
 		ArrayList<TimingPoints> timingPoints = new ArrayList<TimingPoints>();
 		ArrayList<TimingPoints> svs = new ArrayList<TimingPoints>();
@@ -177,13 +193,22 @@ public class OSUDecoder extends ChartDecoder {
 			}
 		}
 		model.setBpm(GetBpm(timingPoints, 0));
+
+		bgaList.add(model.getBackbmp());
 		TimeLine bgmTl = GetTimeline(timelines, 0, 0);
 		Note bgm = new NormalNote(0, 0, 0);
 		bgmTl.addBackGroundNote(bgm);
 		bgmTl.setBPM(GetBpm(timingPoints, bgmTl.getTime()));
 		bgmTl.setScroll(GetSv(svs, bgmTl.getTime()));
-		bgmTl.setBGA(0);
+		bgmTl.setBGA(bgaList.size() - 1);
 
+		for (int i = 0; i < videos.size(); i++) {
+			Events event = videos.get(i);
+			TimeLine timeline = GetTimeline(timelines, event.startTime, GetSection(timingPoints, event.startTime));
+			timeline.setBGA(i);
+			timeline.setBPM(GetBpm(timingPoints, event.startTime));
+			timeline.setScroll(GetSv(svs, event.startTime));
+		}
 		for (int i = 0; i < bgSounds.size(); i++) {
 			Events event = bgSounds.get(i);
 			TimeLine timeline = GetTimeline(timelines, event.startTime, GetSection(timingPoints, event.startTime));
@@ -260,8 +285,7 @@ public class OSUDecoder extends ChartDecoder {
 		}
 		model.setWavList(wavmap.toArray(new String[wavmap.size()]));
 		model.setAllTimeLine(timelines.values().stream().collect(Collectors.toList()).toArray(new TimeLine[timelines.size()]));
-		String[] bgaList = {model.getBackbmp()};
-		model.setBgaList(bgaList);
+		model.setBgaList(bgaList.toArray(new String[bgaList.size()]));
 		model.setChartInformation(new ChartInformation(f, lntype, null));
 		return model;
 	}
