@@ -63,6 +63,8 @@ public abstract class ChartDecoder {
 			return new BMSDecoder(BMSModel.LNTYPE_LONGNOTE);
 		} else if (s.endsWith(".bmson")) {
 			return new BMSONDecoder(BMSModel.LNTYPE_LONGNOTE);
+		} else if (s.endsWith(".osu")) {
+			return new OSUDecoder(BMSModel.LNTYPE_LONGNOTE);
 		}
 		return null;
 	}
