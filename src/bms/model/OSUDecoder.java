@@ -236,6 +236,17 @@ public class OSUDecoder extends ChartDecoder {
 			double beginSection = GetSection(timingPoints, beginTime);
 			int duration = endTime - beginTime;
 			float totalSections = duration / (point.beatLength * 4);
+			if (totalSections > 10000) {
+				TimeLine firstLine = GetTimeline(timelines, beginTime, beginSection);
+				TimeLine lastLine = GetTimeline(timelines, endTime, beginSection + totalSections);
+				firstLine.setBPM(1 / point.beatLength * 1000 * 60);
+				lastLine.setBPM(firstLine.getBPM());
+				firstLine.setScroll(GetSv(svs, beginTime));
+				lastLine.setScroll(GetSv(svs, endTime));
+				firstLine.setSectionLine(true);
+				lastLine.setSectionLine(true);
+				continue;
+			}
 			for (int section = 0; section <= (int)totalSections; section++) {
 				int time = beginTime + (int)(section * point.beatLength * 4);
 				TimeLine line = GetTimeline(timelines, time, beginSection + section);
