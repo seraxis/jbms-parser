@@ -43,6 +43,7 @@ public class OSUDecoder extends ChartDecoder {
 			return null;
 		}
 		Osu osu = new Osu(br);
+		if (osu.timingPoints.isEmpty() || osu.hitObjects.isEmpty()) return null;
 		model = new BMSModel();
 		model.setMD5(BMSDecoder.convertHexString(md5digest.digest()));
 		model.setSHA256(BMSDecoder.convertHexString(sha256digest.digest()));
@@ -258,6 +259,7 @@ public class OSUDecoder extends ChartDecoder {
 
 		for (int i = 0; i < osu.hitObjects.size(); i++) {
 			HitObjects hitObject = osu.hitObjects.get(i);
+			if (hitObject.time < 0) continue;
 			hitObject.time += offset;
 
 			int columnIdx = ((int) Math.floor(hitObject.x * keymode / 512.f));
@@ -274,12 +276,17 @@ public class OSUDecoder extends ChartDecoder {
 			wavmap.add(hitObject.hitSample.filename);
 		}*/
 			if (isManiaHold) {
+				int tailTimeMs = Integer.parseInt(hitObject.objectParams.get(0)) + offset;
+				long tailTimeUs = (long) tailTimeMs * 1000;
+				if (tailTimeMs <= hitObject.time) {
+					NormalNote note = new NormalNote(wavIdx, hitObject.time * 1000, 0);
+					timeline.setNote(mapping[columnIdx], note);
+					continue;
+				}
 				LongNote head = new LongNote(wavIdx, hitObject.time * 1000, 0);
 				head.setType(model.getLntype());
 				timeline.setNote(mapping[columnIdx], head);
 
-				int tailTimeMs = Integer.parseInt(hitObject.objectParams.get(0)) + offset;
-				long tailTimeUs = (long) tailTimeMs * 1000;
 				double tailSection = GetSection(timingPoints, tailTimeMs);
 				LongNote tail = new LongNote(wavIdx, tailTimeUs, 0);
 				tail.setType(model.getLntype());
