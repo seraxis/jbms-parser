@@ -228,7 +228,7 @@ public class BMSONDecoder extends ChartDecoder {
 						}
 					}
 					if(!assigned) {
-							lnup.put(n, new LongNote(id, starttime, duration));
+						lnup.put(n, new LongNote(id, starttime, duration));
 					}
 				} else {
 					boolean insideln = false;
