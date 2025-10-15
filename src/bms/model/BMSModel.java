@@ -106,6 +106,11 @@ public class BMSModel implements Comparable<BMSModel> {
 
 	private int lnobj = -1;
 
+	/**
+	 * Whether this model is decoded by osu decoder or not
+	 */
+	private boolean fromOSU;
+
 	public static final int LNTYPE_LONGNOTE = 0;
 	public static final int LNTYPE_CHARGENOTE = 1;
 	public static final int LNTYPE_HELLCHARGENOTE = 2;
@@ -423,6 +428,14 @@ public class BMSModel implements Comparable<BMSModel> {
 
 	public int getTotalNotes() {
 		return BMSModelUtils.getTotalNotes(this);
+	}
+
+	public boolean isFromOSU() {
+		return fromOSU;
+	}
+
+	public void setFromOSU(boolean fromOSU) {
+		this.fromOSU = fromOSU;
 	}
 
 	public boolean containsUndefinedLongNote() {
