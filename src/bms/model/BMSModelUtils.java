@@ -1,4 +1,7 @@
 package bms.model;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class BMSModelUtils {
 
@@ -147,7 +150,95 @@ public class BMSModelUtils {
 		return count;
 	}
 
-	public double getAverageNotesPerTime(BMSModel model, int start, int end) {
+    public static List<Integer> getTotalNotesCombined(BMSModel model) {
+        return getTotalNotesCombined(model, 0, Integer.MAX_VALUE, 0);
+    }
+
+    // EndlessDream: cut down on redundant note traversals by combining results
+    // TODO: Cleanup redundant code further, for this first pass the goal was to retain original functionality
+    public static List<Integer> getTotalNotesCombined(BMSModel model, int start, int end, int side) {
+        List <Integer> combined = new ArrayList<Integer>(Collections.nCopies(6, 0));
+
+        Mode mode = model.getMode();
+        if(mode.player == 1 && side == 2) {
+            return combined;
+        }
+        int[] slane = new int[mode.scratchKey.length / (side == 0 ? 1 : mode.player)];
+        for(int i = (side == 2 ? slane.length: 0), index = 0;index < slane.length;i++) {
+            slane[index] = mode.scratchKey[i];
+            index++;
+        }
+        int[] nlane = new int[(mode.key - mode.scratchKey.length) / (side == 0 ? 1 : mode.player)];
+        for(int i = 0, index = 0;index < nlane.length;i++) {
+            if(!mode.isScratchKey(i)) {
+                nlane[index] = i;
+                index++;
+            }
+        }
+
+        int count = 0;
+        for (TimeLine tl : model.getAllTimeLines()) {
+            if (tl.getTime() >= start && tl.getTime() < end) {
+
+                // TOTALNOTES_ALL
+                combined.set(TOTALNOTES_ALL, combined.get(TOTALNOTES_ALL) + tl.getTotalNotes(model.getLntype()));
+
+                for (int lane : nlane) {
+                    if (tl.existNote(lane) && (tl.getNote(lane) instanceof NormalNote)) {
+                        combined.set(TOTALNOTES_KEY, combined.get(TOTALNOTES_KEY) + 1);
+                    }
+                }
+                // TOTALNOTES_LONG_KEY
+                for (int lane : nlane) {
+                    if (tl.existNote(lane) && (tl.getNote(lane) instanceof LongNote)) {
+                        LongNote ln = (LongNote) tl.getNote(lane);
+                        if (ln.getType() == LongNote.TYPE_CHARGENOTE
+                                || ln.getType() == LongNote.TYPE_HELLCHARGENOTE
+                                || (ln.getType() == LongNote.TYPE_UNDEFINED && model.getLntype() != BMSModel.LNTYPE_LONGNOTE)
+                                || !ln.isEnd()) {
+                            combined.set(TOTALNOTES_LONG_KEY, combined.get(TOTALNOTES_LONG_KEY) + 1);
+                        }
+                    }
+                }
+
+                // TOTALNOTES_SCRATCH
+                for (int lane : slane) {
+                    if (tl.existNote(lane) && (tl.getNote(lane) instanceof NormalNote)) {
+                        combined.set(TOTALNOTES_SCRATCH, combined.get(TOTALNOTES_SCRATCH) + 1);
+                    }
+                }
+
+                // TOTALNOTES_LONG_SCRATCH
+                for (int lane : slane) {
+                    final Note n = tl.getNote(lane);
+                    if (n instanceof LongNote) {
+                        final LongNote ln = (LongNote) n;
+                        if (ln.getType() == LongNote.TYPE_CHARGENOTE
+                                || ln.getType() == LongNote.TYPE_HELLCHARGENOTE
+                                || (ln.getType() == LongNote.TYPE_UNDEFINED && model.getLntype() != BMSModel.LNTYPE_LONGNOTE)
+                                || !ln.isEnd()) {
+                            combined.set(TOTALNOTES_LONG_SCRATCH, combined.get(TOTALNOTES_LONG_SCRATCH) + 1);
+                        }
+                    }
+                }
+
+                // TOTALNOTES_MINE
+                for (int lane : nlane) {
+                    if (tl.existNote(lane) && (tl.getNote(lane) instanceof MineNote)) {
+                        combined.set(TOTALNOTES_MINE, combined.get(TOTALNOTES_MINE) + 1);
+                    }
+                }
+                for (int lane : slane) {
+                    if (tl.existNote(lane) && (tl.getNote(lane) instanceof MineNote)) {
+                        combined.set(TOTALNOTES_MINE, combined.get(TOTALNOTES_MINE) + 1);
+                    }
+                }
+            }
+        }
+        return combined;
+    }
+
+    public double getAverageNotesPerTime(BMSModel model, int start, int end) {
 		return (double) this.getTotalNotes(model, start, end) * 1000 / (end - start);
 	}
 

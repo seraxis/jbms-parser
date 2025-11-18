@@ -133,7 +133,8 @@ public class BMSDecoder extends ChartDecoder {
 
 			skip.clear();
 			while ((line = br.readLine()) != null) {
-				if (line.length() < 2) {
+                final int len = line.length();
+				if (len < 2) {
 					continue;
 				}
 
@@ -179,7 +180,7 @@ public class BMSDecoder extends ChartDecoder {
 					} else if (skip.isEmpty() || !skip.getLast()) {
 						final char c = line.charAt(1);
 						final int base = model.getBase();
-						if ('0' <= c && c <= '9' && line.length() > 6) {
+						if ('0' <= c && c <= '9' && len > 6) {
 							// line = line.toUpperCase();
 							// 楽譜
 							final char c2 = line.charAt(2);
@@ -227,7 +228,7 @@ public class BMSDecoder extends ChartDecoder {
 							}
 						} else if (matchesReserveWord(line, "WAV")) {
 							// 音源ファイル
-							if (line.length() >= 8) {
+							if (len >= 8) {
 								try {
 									final String file_name = line.substring(7).trim().replace('\\', '/');
 									if(base == 62) {
@@ -244,7 +245,7 @@ public class BMSDecoder extends ChartDecoder {
 							}
 						} else if (matchesReserveWord(line, "BMP")) {
 							// BGAファイル
-							if (line.length() >= 8) {
+							if (len >= 8) {
 								try {
 									final String file_name = line.substring(7).trim().replace('\\', '/');
 									if(base == 62) {
@@ -260,7 +261,7 @@ public class BMSDecoder extends ChartDecoder {
 								log.add(new DecodeLog(WARNING, "#BMPxxは不十分な定義です : " + line));
 							}
 						} else if (matchesReserveWord(line, "STOP")) {
-							if (line.length() >= 9) {
+							if (len >= 9) {
 								try {
 									double stop = Double.parseDouble(line.substring(8).trim()) / 192;
 									if(stop < 0) {
@@ -279,7 +280,7 @@ public class BMSDecoder extends ChartDecoder {
 								log.add(new DecodeLog(WARNING, "#STOPxxは不十分な定義です : " + line));
 							}
 						} else if (matchesReserveWord(line, "SCROLL")) {
-							if (line.length() >= 11) {
+							if (len >= 11) {
 								try {
 									double scroll = Double.parseDouble(line.substring(10).trim());
 									if(base == 62) {
@@ -295,7 +296,7 @@ public class BMSDecoder extends ChartDecoder {
 							}
 						} else {
 							for (CommandWord cw : commandWords) {
-								if (line.length() > cw.name().length() + 2 && matchesReserveWord(line, cw.name())) {
+								if (len > cw.name().length() + 2 && matchesReserveWord(line, cw.name())) {
 									DecodeLog log = cw.function.apply(model, line.substring(cw.name().length() + 2).trim());
 									if (log != null) {
 										this.log.add(log);
@@ -308,12 +309,12 @@ public class BMSDecoder extends ChartDecoder {
 					}
 				} else if(line.charAt(0) == '%') {
 					final int index = line.indexOf(' ');
-					if(index > 0 && line.length() > index + 1) {
+					if(index > 0 && len > index + 1) {
 						model.getValues().put(line.substring(1, index), line.substring(index + 1));
 					}
 				} else if(line.charAt(0) == '@') {
 					final int index = line.indexOf(' ');
-					if(index > 0 && line.length() > index + 1) {
+					if(index > 0 && len > index + 1) {
 						model.getValues().put(line.substring(1, index), line.substring(index + 1));
 					}
 				}
